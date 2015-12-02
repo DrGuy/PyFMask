@@ -11,6 +11,8 @@
 #     + added skimage library
 #     + better handling for imagery of different resolutions
 
+# Some updates by Guy Serbin with version 3.3 code, bug fixes, and ENVI header update routins to produce an ENVI classification headers and color table.
+
 import sys
 import gc
 import math
@@ -633,23 +635,41 @@ def nd2toarbt(filename, images=None):
             stack = {
                 'a': numpy.float32(10000.0 * math.pi),
                 'b': numpy.float32(dsun_doy * dsun_doy),
-                'c': numpy.float32(math.cos(s_zen))
+                'c': numpy.float32(math.cos(s_zen)),
+                'im_B1': numpy.float32(im_B1),
+                'im_B2': numpy.float32(im_B2),
+                'im_B3': numpy.float32(im_B3),
+                'im_B4': numpy.float32(im_B4),
+                'im_B5': numpy.float32(im_B5),
+                'im_B7': numpy.float32(im_B7),
+                'sun': numpy.float32(ESUN[0])
             }
 
-            im_B1 = numexpr.evaluate("a * im_B1 * b / (sun * c)", dict(
-                stack.items() + {'sun': numpy.float32(ESUN[0])}.items()), locals())
-            im_B2 = numexpr.evaluate("a * im_B2 * b / (sun * c)", dict(
-                stack.items() + {'sun': numpy.float32(ESUN[1])}.items()), locals())
-            im_B3 = numexpr.evaluate("a * im_B3 * b / (sun * c)", dict(
-                stack.items() + {'sun': numpy.float32(ESUN[2])}.items()), locals())
-            im_B4 = numexpr.evaluate("a * im_B4 * b / (sun * c)", dict(
-                stack.items() + {'sun': numpy.float32(ESUN[3])}.items()), locals())
-            im_B5 = numexpr.evaluate("a * im_B5 * b / (sun * c)", dict(
-                stack.items() + {'sun': numpy.float32(ESUN[4])}.items()), locals())
-            im_B7 = numexpr.evaluate("a * im_B7 * b / (sun * c)", dict(
-                stack.items() + {'sun': numpy.float32(ESUN[6])}.items()), locals())
+            # im_B1 = numexpr.evaluate("a * im_B1 * b / (sun * c)", dict(
+            #     stack.items() + {'sun': numpy.float32(ESUN[0])}.items()), locals())
+            # im_B2 = numexpr.evaluate("a * im_B2 * b / (sun * c)", dict(
+            #     stack.items() + {'sun': numpy.float32(ESUN[1])}.items()), locals())
+            # im_B3 = numexpr.evaluate("a * im_B3 * b / (sun * c)", dict(
+            #     stack.items() + {'sun': numpy.float32(ESUN[2])}.items()), locals())
+            # im_B4 = numexpr.evaluate("a * im_B4 * b / (sun * c)", dict(
+            #     stack.items() + {'sun': numpy.float32(ESUN[3])}.items()), locals())
+            # im_B5 = numexpr.evaluate("a * im_B5 * b / (sun * c)", dict(
+            #     stack.items() + {'sun': numpy.float32(ESUN[4])}.items()), locals())
+            # im_B7 = numexpr.evaluate("a * im_B7 * b / (sun * c)", dict(
+            #     stack.items() + {'sun': numpy.float32(ESUN[6])}.items()), locals())
+            im_B1 = numexpr.evaluate("a * im_B1 * b / (sun * c)", stack)
+            stack.update({'sun': numpy.float32(ESUN[1])})
+            im_B2 = numexpr.evaluate("a * im_B2 * b / (sun * c)", stack)
+            stack.update({'sun': numpy.float32(ESUN[2])})
+            im_B3 = numexpr.evaluate("a * im_B3 * b / (sun * c)", stack)
+            stack.update({'sun': numpy.float32(ESUN[3])})
+            im_B4 = numexpr.evaluate("a * im_B4 * b / (sun * c)", stack)
+            stack.update({'sun': numpy.float32(ESUN[4])})
+            im_B5 = numexpr.evaluate("a * im_B5 * b / (sun * c)", stack)
+            stack.update({'sun': numpy.float32(ESUN[6])})
+            im_B7 = numexpr.evaluate("a * im_B7 * b / (sun * c)", stack)
 
-        # convert from Kelvin to Celcius with 0.01 scale_facor
+        # convert from Kelvin to Celsius with 0.01 scale_facor
         im_B6 = numexpr.evaluate("a * ((K2 / log((K1 / im_B6) + one)) - b)", {'a': numpy.float32(
             100), 'b': numpy.float32(273.15), 'one': numpy.float32(1.0)}, locals())
 
@@ -1034,35 +1054,35 @@ def plcloud(filename, cldprob=22.5, num_Lst=None, images=None,
         del id_final_cld
 
         # Start with potential cloud shadow mask
-        if shadow_prob:
+        # if shadow_prob: # This if statement is not present in the 3.3 code, removed.
 
-            # band 4 flood fill
-            nir = data4.astype('float32')
-            # estimating background (land) Band 4 ref
-            backg_B4 = scipy.stats.scoreatpercentile(nir[idlnd], 100.0 * l_pt)
-            nir[mask == 0] = backg_B4
-            # fill in regional minimum Band 4 ref
-            nir = imfill_skimage(nir)
-            nir = nir - data4
+        # band 4 flood fill
+        nir = data4.astype('float32')
+        # estimating background (land) Band 4 ref
+        backg_B4 = scipy.stats.scoreatpercentile(nir[idlnd], 100.0 * l_pt)
+        nir[mask == 0] = backg_B4
+        # fill in regional minimum Band 4 ref
+        nir = imfill_skimage(nir)
+        nir = nir - data4
 
-            # band 5 flood fill
-            swir = data5
-            # estimating background (land) Band 4 ref
-            backg_B5 = scipy.stats.scoreatpercentile(swir[idlnd], 100.0 * l_pt)
-            swir[mask == 0] = backg_B5
-            # fill in regional minimum Band 5 ref
-            swir = imfill_skimage(swir)
-            swir = swir - data5
+        # band 5 flood fill
+        swir = data5
+        # estimating background (land) Band 4 ref
+        backg_B5 = scipy.stats.scoreatpercentile(swir[idlnd], 100.0 * l_pt)
+        swir[mask == 0] = backg_B5
+        # fill in regional minimum Band 5 ref
+        swir = imfill_skimage(swir)
+        swir = swir - data5
 
-            # compute shadow probability
-            shadow_prob = numpy.minimum(nir, swir)
-            # release remory
-            del nir
-            del swir
+        # compute shadow probability
+        shadow_prob = numpy.minimum(nir, swir)
+        # release remory
+        del nir
+        del swir
 
-            Shadow[shadow_prob > 200] = 1
-            # release remory
-            del shadow_prob
+        Shadow[shadow_prob > 200] = 1
+        # release remory
+        del shadow_prob
 
         # Cloud[idplcd==True]=1 # all cld
 
@@ -1583,6 +1603,7 @@ plsim, ijDim, resolu, ZC, cldpix, sdpix, snpix):
 
     if ptm <= 0.1 or revised_ptm >= 0.90:
         #     fprintf('No Shadow Match due to too much cloud (>90 percent)')
+        print('Skip cloud & cloud shadow matching because high cloud cover.')
         cloud_cal[cloud_test == True] = 1
         shadow_cal[cloud_test == False] = 1
         similar_num = -1
@@ -1590,7 +1611,7 @@ plsim, ijDim, resolu, ZC, cldpix, sdpix, snpix):
 
     else:
         #     fprintf('Shadow Match in processing')
-
+        print('Cloud & cloud shadow matching ...')
         # define constants
         Tsimilar = 0.30
         Tbuffer = 0.95  # threshold for matching buffering
@@ -1910,6 +1931,82 @@ def mat_truecloud(x, y, h, A, B, C, omiga_par, omiga_per):
     return (x_new, y_new)
 
 
+def updatefmaskheader(file): # This backs up the ENVI header file created by GDAL, and creates a new one as an ENVI Classification
+    header=['ENVI\n']
+    if not file.endswith('.hdr'):
+        j=file.rfind('.')
+        file=file[:j]+'.hdr'
+    basename=os.path.basename(file)
+    acqtime, bandname, description = getacqtime(basename)
+    header.append(description)
+    today=datetime.datetime.today()
+    todaystr=today.strftime('%Y%m%d-%H%M%S')
+    bak=file.replace('.hdr', '.hdr.%s.bak'%todaystr) # Creates a backup of the ENVI header file, with the date and time of the backup.
+    os.rename(file,bak)
+    projinfo=''
+    classnum='classes = 6\n' # Class information for the header file
+    classlookup='class lookup = {0, 255, 0, 0, 0, 255, 127, 127, 127, 0, 255, 255, 255, 255, 255, 0, 0, 0}\n'
+    classnames='class names = {Clear land, Clear water, Cloud shadow, Snow/ ice, Cloud, No data}\n'
+    print('Processing '+file)
+    linevals=[]
+    with open(bak, 'r') as lines:
+        gcsinfile=False
+        for line in lines:
+            if line[:7]=='samples':
+                header.append(line)
+            elif line[:5]=='lines':
+                header.append(line)
+            elif line[:5]=='bands':
+                header.append(line)
+            elif line[:13]=='header offset':
+                header.append(line)
+            elif line[:10]=='byte order':
+                header.append(line)
+            elif line[:9]=='file type':
+                header.append(line)
+            elif line[:9]=='data type':
+                header.append(line)
+                header.append('data ignore value = 255\n')
+            elif line[:10]=='interleave':
+                header.append(line)
+            elif line[:11]=='sensor_type':
+                header.append(line)
+            elif line[:8]=='map info':
+                mapinfo=line
+            elif line[:17]=='coordinate system':
+                gcsstring=line
+            elif line[:15]=='projection info':
+                projinfo=line
+        if not gcsinfile:
+            gcsstring=gcs(mapinfo)
+    for a in [mapinfo, gcsstring]:
+        header.append(a)
+    if projinfo!='':
+        header.append(projinfo)
+    appendlist=[bandname,classnum,classnames,classlookup,acqtime]
+    for a in appendlist:
+        header.append(a)
+    with open(file, 'w') as output:
+        for h in header:
+            output.write(h)
+    print('ENVI header updated for '+file)
+
+
+def getacqtime(filename): # This takes only the base file name, not the whole path.
+    if not 'lndsr.' in filename:
+        hdrdate=filename[9:16]
+        sceneid=filename[:16]
+    else:
+        hdrdate=filename[15:22]
+        sceneid=filename[6:22]
+    datetuple=time.strptime(hdrdate,'%Y%j')
+    yearmonthday=time.strftime('%Y-%m-%d',datetuple)
+    acqtime='acquisition time = { %s}\n'%yearmonthday
+    bandname= 'band names = { Fmask Cloud Mask %s}\n'%yearmonthday
+    description = 'description = { Landsat Fmask Cloud Mask %s}\n'%sceneid
+    return acqtime, bandname, description
+
+
 def run_FMask(mtl, outdir=None, cldprob=22.5, cldpix=3, sdpix=3, snpix=3):
     # Check that the MTL file exists
     assert os.path.exists(mtl), "Invalid filename: %s" % mtl
@@ -1924,11 +2021,12 @@ def run_FMask(mtl, outdir=None, cldprob=22.5, cldpix=3, sdpix=3, snpix=3):
     assert os.path.exists(outdir), "Directory doesn't exist: %s" % outdir
 
     # Create the output filenames
+    basename=os.path.basename(mtl)
     log_fname = os.path.join(outdir, 'FMASK_LOGFILE.txt')
-    cloud_fname = os.path.join(outdir, 'fmask_cloud')
-    cloud_shadow_fname = os.path.join(outdir, 'fmask_shadow')
-    final_mask_fname = os.path.join(outdir, 'fmask_final_mask')
-    fmask_fname = os.path.join(outdir, 'fmask')
+    cloud_fname = os.path.join(outdir, basename.replace('.mtl','_fmask_cloud.dat')) # Because many software packages assume ENVI data files end in .dat
+    cloud_shadow_fname = os.path.join(outdir, basename.replace('.mtl','_fmask_shadow.dat'))
+    final_mask_fname = os.path.join(outdir, basename.replace('.mtl','_fmask_final_mask.dat'))
+    fmask_fname = os.path.join(outdir, basename.replace('.mtl','_fmask.dat'))
 
     # Open the MTL file.
     # The original MATLAB code opens the file twice to
@@ -1981,7 +2079,10 @@ def run_FMask(mtl, outdir=None, cldprob=22.5, cldpix=3, sdpix=3, snpix=3):
     c.SetProjection(prj)
     c.GetRasterBand(1).WriteArray(cs_final)
     c = None
-
+    
+    updatefmaskheader(fmask.replace('.dat','.hdr')) # Update Fmask header
+    
+    
     final_mask = ((cs_final != 0)).astype('uint8')
     c = gdal.GetDriverByName('ENVI').Create(final_mask_fname, final_mask.shape[
         1], final_mask.shape[0], 1, gdal.GDT_Byte)

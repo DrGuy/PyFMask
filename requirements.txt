@@ -1,4 +1,4 @@
-pygdal
+gdal
 numexpr
 scikit-image
 numpy

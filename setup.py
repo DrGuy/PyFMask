@@ -20,7 +20,7 @@ setup(
         'scipy',
         'numexpr',
         'scikit-image',
-        'pygdal',
+        'gdal',
     ],
     entry_points="""
         [console_scripts]
