@@ -70,6 +70,7 @@ def im_info(filename):
 
 
 def imread(filename, resample=False, samples=None, lines=None):
+    print('Opening %s'%os.path.basename(filename))
     img = gdal.Open(filename)
     band = img.GetRasterBand(1)
     if resample:
@@ -96,10 +97,11 @@ def imfill_skimage(img):
     seed[1:-1, 1:-1] = img.max()
 
     # Define the mask; Probably unneeded.
-    mask = img
+    # mask = img
 
     # Fill the holes
-    filled = morphology.reconstruction(seed, mask, method='erosion')
+    # filled = morphology.reconstruction(seed, mask, method='erosion')
+    filled = morphology.reconstruction(seed, img, method='erosion')
 
     return filled
 
@@ -1062,7 +1064,8 @@ def plcloud(filename, cldprob=22.5, num_Lst=None, images=None,
         backg_B4 = scipy.stats.scoreatpercentile(nir[idlnd], 100.0 * l_pt)
         nir[mask == 0] = backg_B4
         # fill in regional minimum Band 4 ref
-        nir = imfill_skimage(nir)
+        print('Filling in regional minimum for NIR band.')
+        nir = scipy.ndimage.morphology.binary_fill_holes(nir) # imfill_skimage(nir)
         nir = nir - data4
 
         # band 5 flood fill
@@ -1071,10 +1074,12 @@ def plcloud(filename, cldprob=22.5, num_Lst=None, images=None,
         backg_B5 = scipy.stats.scoreatpercentile(swir[idlnd], 100.0 * l_pt)
         swir[mask == 0] = backg_B5
         # fill in regional minimum Band 5 ref
-        swir = imfill_skimage(swir)
+        print('Filling in regional minimum for SWIR band.')
+        swir = scipy.ndimage.morphology.binary_fill_holes(swir) # imfill_skimage(swir)
         swir = swir - data5
 
         # compute shadow probability
+        print('Computing shadow probability.')
         shadow_prob = numpy.minimum(nir, swir)
         # release remory
         del nir
@@ -1114,6 +1119,7 @@ def plcloud(filename, cldprob=22.5, num_Lst=None, images=None,
     gc.collect()
 
     # refine Water mask - Zhe's water mask (no confusion water/cloud)
+    print('Refining the water mask.')
     WT[numexpr.evaluate("(WT == 1) & (Cloud == 0)")] = 1
     # bwmorph changed Cloud to Binary
     Cloud = Cloud.astype('uint8')
@@ -1977,8 +1983,6 @@ def updatefmaskheader(file): # This backs up the ENVI header file created by GDA
                 gcsstring=line
             elif line[:15]=='projection info':
                 projinfo=line
-        if not gcsinfile:
-            gcsstring=gcs(mapinfo)
     for a in [mapinfo, gcsstring]:
         header.append(a)
     if projinfo!='':
@@ -1999,8 +2003,8 @@ def getacqtime(filename): # This takes only the base file name, not the whole pa
     else:
         hdrdate=filename[15:22]
         sceneid=filename[6:22]
-    datetuple=time.strptime(hdrdate,'%Y%j')
-    yearmonthday=time.strftime('%Y-%m-%d',datetuple)
+    datetuple=datetime.datetime.strptime(hdrdate,'%Y%j')
+    yearmonthday=datetuple.strftime('%Y-%m-%d')
     acqtime='acquisition time = { %s}\n'%yearmonthday
     bandname= 'band names = { Fmask Cloud Mask %s}\n'%yearmonthday
     description = 'description = { Landsat Fmask Cloud Mask %s}\n'%sceneid
@@ -2019,14 +2023,15 @@ def run_FMask(mtl, outdir=None, cldprob=22.5, cldpix=3, sdpix=3, snpix=3):
 
     # Check that the output directory exists
     assert os.path.exists(outdir), "Directory doesn't exist: %s" % outdir
+    print('Saving files to: %s'%outdir)
 
     # Create the output filenames
     basename=os.path.basename(mtl)
     log_fname = os.path.join(outdir, 'FMASK_LOGFILE.txt')
-    cloud_fname = os.path.join(outdir, basename.replace('.mtl','_fmask_cloud.dat')) # Because many software packages assume ENVI data files end in .dat
-    cloud_shadow_fname = os.path.join(outdir, basename.replace('.mtl','_fmask_shadow.dat'))
-    final_mask_fname = os.path.join(outdir, basename.replace('.mtl','_fmask_final_mask.dat'))
-    fmask_fname = os.path.join(outdir, basename.replace('.mtl','_fmask.dat'))
+    cloud_fname = os.path.join(outdir, basename.replace('_MTL.txt','_fmask_cloud.dat')) # Because many software packages assume ENVI data files end in .dat
+    cloud_shadow_fname = os.path.join(outdir, basename.replace('_MTL.txt','_fmask_shadow.dat'))
+    final_mask_fname = os.path.join(outdir, basename.replace('_MTL.txt','_fmask_final_mask.dat'))
+    fmask_fname = os.path.join(outdir, basename.replace('_MTL.txt','_fmask.dat'))
 
     # Open the MTL file.
     # The original MATLAB code opens the file twice to
@@ -2059,13 +2064,15 @@ def run_FMask(mtl, outdir=None, cldprob=22.5, cldpix=3, sdpix=3, snpix=3):
     et = datetime.datetime.now()
     logger.info('time taken for fcssm function: %s', str(et - st))
 
+    print('Writing cloud raster to disk.')
     c = gdal.GetDriverByName('ENVI').Create(cloud_fname, Cloud.shape[
         1], Cloud.shape[0], 1, gdal.GDT_Byte)
     c.SetGeoTransform(geoT)
     c.SetProjection(prj)
     c.GetRasterBand(1).WriteArray(Cloud * 255)
     c = None
-
+    
+    print('Writing cloud shadow raster to disk.')
     c = gdal.GetDriverByName('ENVI').Create(cloud_shadow_fname, shadow_cal.shape[
         1], shadow_cal.shape[0], 1, gdal.GDT_Byte)
     c.SetGeoTransform(geoT)
@@ -2073,6 +2080,7 @@ def run_FMask(mtl, outdir=None, cldprob=22.5, cldpix=3, sdpix=3, snpix=3):
     c.GetRasterBand(1).WriteArray(shadow_cal * 255)
     c = None
 
+    print('Writing Fmask raster to disk.')
     c = gdal.GetDriverByName('ENVI').Create(fmask_fname, cs_final.shape[
         1], cs_final.shape[0], 1, gdal.GDT_Byte)
     c.SetGeoTransform(geoT)
@@ -2080,9 +2088,9 @@ def run_FMask(mtl, outdir=None, cldprob=22.5, cldpix=3, sdpix=3, snpix=3):
     c.GetRasterBand(1).WriteArray(cs_final)
     c = None
     
-    updatefmaskheader(fmask.replace('.dat','.hdr')) # Update Fmask header
+    updatefmaskheader(fmask_fname.replace('.dat','.hdr')) # Update Fmask header
     
-    
+    print('Writing final mask raster to disk.')
     final_mask = ((cs_final != 0)).astype('uint8')
     c = gdal.GetDriverByName('ENVI').Create(final_mask_fname, final_mask.shape[
         1], final_mask.shape[0], 1, gdal.GDT_Byte)
