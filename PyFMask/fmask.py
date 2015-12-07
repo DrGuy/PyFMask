@@ -899,42 +899,42 @@ def plcloud(filename, cldprob=22.5, num_Lst=None, images=None): # ,
 
     Shadow = numpy.zeros(dim, 'uint8')  # shadow mask
 
-    # data1 = data[0, :, :]
-    # data2 = data[1, :, :]
-    # data3 = data[2, :, :]
-    # data4 = data[3, :, :]
-    # data5 = data[4, :, :]
-    # data6 = data[5, :, :]
+    data1 = data[0, :, :]
+    data2 = data[1, :, :]
+    data3 = data[2, :, :]
+    data4 = data[3, :, :]
+    data5 = data[4, :, :]
+    data6 = data[5, :, :]
 
-    NDVI = numexpr.evaluate("(data[3, :, :] - data[2, :, :]) / (data[3, :, :] + data[2, :, :])")
-    NDSI = numexpr.evaluate("(data[1, :, :] - data[4, :, :]) / (data[1, :, :] + data[4, :, :])")
+    NDVI = numexpr.evaluate("(data4 - data3) / (data4 + data3)")
+    NDSI = numexpr.evaluate("(data2 - data5) / (data2 + data5)")
 
-    NDVI[numexpr.evaluate("(data[3, :, :] + data[2, :, :]) == 0")] = 0.01
-    NDSI[numexpr.evaluate("(data[1, :, :] + data[4, :, :]) == 0")] = 0.01
+    NDVI[numexpr.evaluate("(data4 + data3) == 0")] = 0.01
+    NDSI[numexpr.evaluate("(data2 + data5) == 0")] = 0.01
 
     # saturation in the three visible bands
-    satu_Bv = numexpr.evaluate("(satu_B1 + satu_B2 + satu_B3)>=1")
+    satu_Bv = numexpr.evaluate("(satu_B1 | satu_B2 | satu_B3)>=1")
     del satu_B1
     # Basic cloud test
     idplcd = numexpr.evaluate(
-        "(NDSI < 0.8) & (NDVI < 0.8) & (data[5, :, :] > 300) & (Temp < 2700)")
+        "(NDSI < 0.8) & (NDVI < 0.8) & (data6 > 300) & (Temp < 2700)")
 
     # Snow test
     # It takes every snow pixels including snow pixel under thin clouds or icy
     # clouds
     Snow[numexpr.evaluate(
-        "(NDSI > 0.15) & (Temp < 1000) & (data[3, :, :] > 1100) & (data[1, :, :] > 1000)")] = 1
+        "(NDSI > 0.15) & (Temp < 1000) & (data4 > 1100) & (data2 > 1000)")] = 1
     #Snow[mask == 0] = 255
     # Water test
     # Zhe's water test (works over thin cloud)
     WT[numexpr.evaluate(
-        "((NDVI < 0.01) & (data[3, :, :] < 1100)) | ((NDVI < 0.1) & (NDVI > 0) & (data[3, :, :] < 500))")] = 1
+        "((NDVI < 0.01) & (data4 < 1100)) | ((NDVI < 0.1) & (NDVI > 0) & (data4 < 500))")] = 1
     WT[mask == 0] = 255
     # ################################################ Whiteness test
     # visible bands flatness (sum(abs)/mean < 0.6 => brigt and dark cloud )
-    visimean = numexpr.evaluate("(data[0, :, :] + data[1, :, :] + data[2, :, :]) / 3 ")
+    visimean = numexpr.evaluate("(data1 + data2 + data3) / 3 ")
     whiteness = numexpr.evaluate(
-        "(abs(data[0, :, :] - visimean) + abs(data[1, :, :] - visimean)+ abs(data[2, :, :] - visimean)) / visimean")
+        "(abs(data1 - visimean) + abs(data2 - visimean)+ abs(data3 - visimean)) / visimean")
     del visimean
 
     # update idplcd
@@ -942,12 +942,12 @@ def plcloud(filename, cldprob=22.5, num_Lst=None, images=None): # ,
     idplcd &= whiteness < 0.7
 
     # Haze test
-    HOT = numexpr.evaluate("data[0, :, :] - 0.5 * data[2, :, :] - 800")  # Haze test
+    HOT = numexpr.evaluate("data1 - 0.5 * data3 - 800")  # Haze test
     idplcd &= numexpr.evaluate("(HOT > 0) | satu_Bv")
     del HOT  # need to find thick warm cloud
 
     # Ratio4/5>0.75 cloud test
-    idplcd &= numexpr.evaluate("(data[3, :, :] / data[4, :, :]) > 0.75")
+    idplcd &= numexpr.evaluate("(data4 / data5) > 0.75")
 
     # Cirrus tests from Landsat 8
     idplcd |= numexpr.evaluate("Thin_prob > 0.25")
@@ -1000,7 +1000,7 @@ def plcloud(filename, cldprob=22.5, num_Lst=None, images=None): # ,
 
         # Get cloud prob over water
         # temperature test (over water)
-        # F_wtemp = Temp[numexpr.evaluate("(WT == 1) & (data[5, :, :] <= 300)")] # get
+        # F_wtemp = Temp[numexpr.evaluate("(WT == 1) & (data6 <= 300)")] # get
         # del water temperature
         F_wtemp = Temp[idwt]
         # if len(F_wtemp) == 0:
@@ -1012,7 +1012,7 @@ def plcloud(filename, cldprob=22.5, num_Lst=None, images=None): # ,
 
         # Brightness test (over water)
         t_bright = 1100
-        Brightness_prob = data[4, :, :] / t_bright
+        Brightness_prob = data5 / t_bright
         Brightness_prob[Brightness_prob > 1] = 1
         Brightness_prob[Brightness_prob < 0] = 0
 
@@ -1098,24 +1098,24 @@ def plcloud(filename, cldprob=22.5, num_Lst=None, images=None): # ,
         # if shadow_prob: # This if statement is not present in the 3.3 code, removed.
 
         # band 4 flood fill
-        nir = data[3, :, :].astype('float32')
+        nir = data4.astype('float32')
         # estimating background (land) Band 4 ref
         backg_B4 = scipy.stats.scoreatpercentile(nir[idlnd], 100.0 * l_pt)
         nir[mask == 0] = backg_B4
         # fill in regional minimum Band 4 ref
         print('Filling in regional minimum for NIR band.')
         nir = scipy.ndimage.morphology.binary_fill_holes(nir) # imfill_skimage(nir)
-        nir = nir - data[3, :, :]
+        nir = nir - data4
 
         # band 5 flood fill
-        swir = data[4, :, :]
+        swir = data5
         # estimating background (land) Band 4 ref
         backg_B5 = scipy.stats.scoreatpercentile(swir[idlnd], 100.0 * l_pt)
         swir[mask == 0] = backg_B5
         # fill in regional minimum Band 5 ref
         print('Filling in regional minimum for SWIR band.')
         swir = scipy.ndimage.morphology.binary_fill_holes(swir) # imfill_skimage(swir)
-        swir = swir - data[4, :, :]
+        swir = swir - data5
 
         # compute shadow probability
         print('Computing shadow probability.')
@@ -1252,42 +1252,42 @@ def plcloud_warm(toa_bt, cldprob=22.5, num_Lst=None,
 
     Shadow = numpy.zeros(dim, 'uint8')  # shadow mask
 
-    # data1 = data[0, :, :]
-    # data2 = data[1, :, :]
-    # data3 = data[2, :, :]
-    # data4 = data[3, :, :]
-    # data5 = data[4, :, :]
-    # data6 = data[5, :, :]
+    data1 = data[0, :, :]
+    data2 = data[1, :, :]
+    data3 = data[2, :, :]
+    data4 = data[3, :, :]
+    data5 = data[4, :, :]
+    data6 = data[5, :, :]
 
-    NDVI = numexpr.evaluate("(data[3, :, :] - data[2, :, :]) / (data[3, :, :] + data[2, :, :])")
-    NDSI = numexpr.evaluate("(data[1, :, :] - data[4, :, :]) / (data[1, :, :] + data[4, :, :])")
+    NDVI = numexpr.evaluate("(data4 - data3) / (data4 + data3)")
+    NDSI = numexpr.evaluate("(data2 - data5) / (data2 + data5)")
 
-    NDVI[numexpr.evaluate("(data[3, :, :] + data[2, :, :]) == 0")] = 0.01
-    NDSI[numexpr.evaluate("(data[1, :, :] + data[4, :, :]) == 0")] = 0.01
+    NDVI[numexpr.evaluate("(data4 + data3) == 0")] = 0.01
+    NDSI[numexpr.evaluate("(data2 + data5) == 0")] = 0.01
 
     # saturation in the three visible bands
     satu_Bv = numexpr.evaluate("(satu_B1 | satu_B2 | satu_B3)")
     del satu_B1
     # Basic cloud test
     idplcd = numexpr.evaluate(
-        "(NDSI < 0.8) & (NDVI < 0.8) & (data[5, :, :] > 300) & (Temp < 2700)")
+        "(NDSI < 0.8) & (NDVI < 0.8) & (data6 > 300) & (Temp < 2700)")
 
     # Snow test
     # It takes every snow pixels including snow pixel under thin clouds or icy
     # clouds
     Snow[numexpr.evaluate(
-        "(NDSI > 0.15) & (Temp < 1000) & (data[3, :, :] > 1100) & (data[1, :, :] > 1000)")] = 1
+        "(NDSI > 0.15) & (Temp < 1000) & (data4 > 1100) & (data2 > 1000)")] = 1
     #Snow[mask == 0] = 255
     # Water test
     # Zhe's water test (works over thin cloud)
     WT[numexpr.evaluate(
-        "((NDVI < 0.01) & (data[3, :, :] < 1100)) | ((NDVI < 0.1) & (NDVI > 0) & (data[3, :, :] < 500))")] = 1
+        "((NDVI < 0.01) & (data4 < 1100)) | ((NDVI < 0.1) & (NDVI > 0) & (data4 < 500))")] = 1
     WT[mask == 0] = 255
     # ################################################ Whiteness test
     # visible bands flatness (sum(abs)/mean < 0.6 => brigt and dark cloud )
-    visimean = numexpr.evaluate("(data[0, :, :] + data[1, :, :] + data[2, :, :]) / 3 ")
+    visimean = numexpr.evaluate("(data1 + data2 + data3) / 3 ")
     whiteness = numexpr.evaluate(
-        "(abs(data[0, :, :] - visimean) + abs(data[1, :, :] - visimean)+ abs(data[2, :, :] - visimean)) / visimean")
+        "(abs(data1 - visimean) + abs(data2 - visimean)+ abs(data3 - visimean)) / visimean")
     del visimean
 
     # update idplcd
@@ -1295,12 +1295,12 @@ def plcloud_warm(toa_bt, cldprob=22.5, num_Lst=None,
     idplcd &= whiteness < 0.7
 
     # Haze test
-    HOT = numexpr.evaluate("data[0, :, :] - 0.5 * data[2, :, :] - 800")  # Haze test
+    HOT = numexpr.evaluate("data1 - 0.5 * data3 - 800")  # Haze test
     idplcd &= numexpr.evaluate("(HOT > 0) | satu_Bv")
     del HOT  # need to find thick warm cloud
 
     # Ratio4/5>0.75 cloud test
-    idplcd &= numexpr.evaluate("(data[3, :, :] / data[4, :, :]) > 0.75")
+    idplcd &= numexpr.evaluate("(data4 / data5) > 0.75")
 
     # Cirrus tests from Landsat 8
     idplcd |= numexpr.evaluate("Thin_prob > 0.25")
@@ -1353,7 +1353,7 @@ def plcloud_warm(toa_bt, cldprob=22.5, num_Lst=None,
 
         # Get cloud prob over water
         # temperature test (over water)
-        # F_wtemp = Temp[numexpr.evaluate("(WT == 1) & (data[5, :, :] <= 300)")] # get
+        # F_wtemp = Temp[numexpr.evaluate("(WT == 1) & (data6 <= 300)")] # get
         # del water temperature
         F_wtemp = Temp[idwt]
         if len(F_wtemp) == 0:
@@ -1365,7 +1365,7 @@ def plcloud_warm(toa_bt, cldprob=22.5, num_Lst=None,
 
         # Brightness test (over water)
         t_bright = 1100
-        Brightness_prob = data[4, :, :] / t_bright
+        Brightness_prob = data5 / t_bright
         Brightness_prob[Brightness_prob > 1] = 1
         Brightness_prob[Brightness_prob < 0] = 0
 
@@ -1450,22 +1450,22 @@ def plcloud_warm(toa_bt, cldprob=22.5, num_Lst=None,
         # Start with potential cloud shadow mask
         if shadow_prob:
             # band 4 flood fill
-            nir = data[3, :, :].astype('float32')
+            nir = data4.astype('float32')
             # estimating background (land) Band 4 ref
             backg_B4 = scipy.stats.scoreatpercentile(nir[idlnd], 100.0 * l_pt)
             nir[mask == 0] = backg_B4
             # fill in regional minimum Band 4 ref
             nir = imfill_skimage(nir)
-            nir = nir - data[3, :, :]
+            nir = nir - data4
 
             # band 5 flood fill
-            swir = data[4, :, :]
+            swir = data5
             # estimating background (land) Band 4 ref
             backg_B5 = scipy.stats.scoreatpercentile(swir[idlnd], 100.0 * l_pt)
             swir[mask == 0] = backg_B5
             # fill in regional minimum Band 5 ref
             swir = imfill_skimage(swir)
-            swir = swir - data[4, :, :]
+            swir = swir - data5
 
             # compute shadow probability
             shadow_prob = numpy.minimum(nir, swir)
@@ -1702,19 +1702,23 @@ plsim, ijDim, resolu, ZC, cldpix, sdpix, snpix):
 
         # get view angle geometry
         # print x_ul, y_ul, x_ur, y_ur, x_ll, y_ll, x_lr, y_lr
+        print('Getting view angle geometry.')
         (A, B, C, omiga_par, omiga_per) = viewgeo(float(x_ul), float(y_ul), float(
             x_ur), float(y_ur), float(x_ll), float(y_ll), float(x_lr), float(y_lr))
 
         # Segmentate each cloud
         #     print('Cloud segmentation & matching')
-        (segm_cloud_init, segm_cloud_init_features) = measure.label(
-            cloud_test, scipy.ndimage.morphology.generate_binary_structure(2, 2))
-        
-        segm_cloud_init=measure.label(cloud_test,8) # bwlabeln(cloud_test,8)
-        
+        # (segm_cloud_init, segm_cloud_init_features) = measure.label(
+        #     cloud_test, scipy.ndimage.morphology.generate_binary_structure(2, 2))
+        print('Segmenting each cloud.')
+        segm_cloud_init, num=measure.label(cloud_test,8, return_num=True) # bwlabeln(cloud_test,8)
+        print('The total number of initial cloud objects are: %d'%num)
         # L = segm_cloud_init
         s = measure.regionprops(segm_cloud_init,'area')
-        area = s.Area
+        # print('s has a length of %d.'% len(s))
+        area=[]
+        for x in s:
+            area.append(x.area)
         
         # filter out cloud object < than num_cldoj pixels
         # morphology.remove_small_objects(
@@ -1746,9 +1750,17 @@ plsim, ijDim, resolu, ZC, cldpix, sdpix, snpix):
         # similar_num = numpy.zeros(num)  # cloud shadow match similarity (m)
         
         # filter out cloud object < than num_cldoj pixels
-        idx = np.where(area >= num_cldoj)
-        segm_cloud_tmp = ismember(L,idx)
-        segm_cloud,num=measure.label(segm_cloud_tmp,8)
+        print('Filtering out small cloud objects.')
+        idx = numexpr.evaluate('area >= num_cldoj')
+        print('Shapes of segm_cloud_init:')
+        print(segm_cloud_init.shape)
+        print('idx:')
+        print(idx.shape)
+        print('Length segm_cloud_init: %d, idx: %d'%(len(segm_cloud_init),len(idx)))
+        segm_cloud_tmp = ismember(segm_cloud_init,idx)
+        
+        segm_cloud,num=measure.label(segm_cloud_tmp,8, return_num=True)
+        print('The number of cloud types are: %d' %num)
     
         s = measure.regionprops(segm_cloud,'area')
         area_final = s.Area
@@ -1761,12 +1773,13 @@ plsim, ijDim, resolu, ZC, cldpix, sdpix, snpix):
         # Use iteration to get the optimal move distance
         # Calulate the moving cloud shadow
     
-        # height_num=np.zeros(1,num) # cloud relative height (m)
-        similar_num=np.zeros(1,num) # cloud shadow match similarity (m)
+        # height_num=numpy.zeros(1,num) # cloud relative height (m)
+        similar_num=numpy.zeros(1,num) # cloud shadow match similarity (m)
         
         # Newer method of looping through the cloud objects/segments JS
         # 16/12/2013
-        for cloud_type in num:
+        print('Looping through cloud objects.')
+        for cloud_type in range(num):
 
             cld_area = cloud_type['Area']
             cld_label = cloud_type['Label']
@@ -2012,13 +2025,20 @@ def mat_truecloud(x, y, h, A, B, C, omiga_par, omiga_per):
     return (x_new, y_new)
 
 
-def ismember(a, b):
+def ismember(d, k):
+    # from http://stackoverflow.com/questions/25923027/matlab-ismember-function-in-python
+    return [1 if (i == k) else 0 for i in d]
+
+# def ismember(a, b):
+    # Mode modified based upon Matlab code definition in http://uk.mathworks.com/help/matlab/ref/ismember.html?searchHighlight=ismember
+    # bind = [a.any(x) for x in b]
+    # return bind
     # Code for this is copied from http://stackoverflow.com/questions/15864082/python-equivalent-of-matlabs-ismember-function
-    bind = {}
-    for i, elt in enumerate(b):
-        if elt not in bind:
-            bind[elt] = i
-    return [bind.get(itm, None) for itm in a]  # None can be replaced by any other "not in b" value
+    # bind={}
+    # for i, elt in enumerate(b):
+    #     if elt not in bind:
+    #         bind[elt] = i
+    # return [bind.get(itm, None) for itm in a]  # None can be replaced by any other "not in b" value
 
 
 def updatefmaskheader(file): # This backs up the ENVI header file created by GDAL, and creates a new one as an ENVI Classification
@@ -2139,7 +2159,7 @@ def run_FMask(mtl, outdir=None, cldprob=22.5, cldpix=3, sdpix=3, snpix=3):
 
     st = datetime.datetime.now()
     zen, azi, ptm, Temp, t_templ, t_temph, WT, Snow, Cloud, Shadow, dim, ul, resolu, zc, geoT, prj = plcloud(
-        mtl, cldprob, num_Lst=Lnum, shadow_prob=True)
+        mtl, cldprob, num_Lst=Lnum)
     et = datetime.datetime.now()
     logger.info('time taken for plcloud function: %s', str(et - st))
     st = datetime.datetime.now()
