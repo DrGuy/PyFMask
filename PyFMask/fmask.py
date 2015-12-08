@@ -1758,31 +1758,35 @@ plsim, ijDim, resolu, ZC, cldpix, sdpix, snpix):
         print(idx.shape)
         print('Length segm_cloud_init: %d, idx: %d'%(len(segm_cloud_init),len(idx)))
         segm_cloud_tmp = ismember(segm_cloud_init,idx)
-        
+        print('The maximum value of segm_cloud_tmp is: %d'%numpy.amax(segm_cloud_tmp))
         segm_cloud,num=measure.label(segm_cloud_tmp,8, return_num=True)
         print('The number of cloud types are: %d' %num)
-    
-        s = measure.regionprops(segm_cloud,'area')
-        area_final = s.Area
-        obj_num=area_final
+        print('The shape of segm_cloud is:')
+        print(segm_cloud.shape)
+        # s = measure.regionprops(segm_cloud,'area')
+        
+        # area_final=[]
+        # for x in s:
+        #     area_final.append(x.area)
+        # obj_num=area_final
     
         # Get the x,y of each cloud
         # Matrix used in recording the x,y
         xys = measure.regionprops(segm_cloud,'PixelList')
-    
+        print('The length of xys is: %d'%len(xys))
         # Use iteration to get the optimal move distance
         # Calulate the moving cloud shadow
     
         # height_num=numpy.zeros(1,num) # cloud relative height (m)
-        similar_num=numpy.zeros(1,num) # cloud shadow match similarity (m)
+        similar_num=numpy.zeros(num) # cloud shadow match similarity (m)
         
         # Newer method of looping through the cloud objects/segments JS
         # 16/12/2013
         print('Looping through cloud objects.')
         for cloud_type in range(num):
 
-            cld_area = cloud_type['Area']
-            cld_label = cloud_type['Label']
+            cld_area = xys[cloud_type].area
+            cld_label = xys[cloud_type].label
 
             num_pixels = cld_area
 
@@ -1798,9 +1802,11 @@ plsim, ijDim, resolu, ZC, cldpix, sdpix, snpix):
             tmp_xys = numpy.zeros((2, num_pixels))
 
             # record this original ids
-            orin_cid = (cloud_type['Coordinates'][:, 0],
-                        cloud_type['Coordinates'][:, 1])
-
+            orin_cid = xys[cloud_type].coords[0]
+            print('orin_cid:')
+            print(orin_cid)
+            print('Length: %d'%len(orin_cid))
+            
             # Temperature of the cloud object
             temp_obj = Temp[orin_cid]
 
@@ -2025,12 +2031,16 @@ def mat_truecloud(x, y, h, A, B, C, omiga_par, omiga_per):
     return (x_new, y_new)
 
 
-def ismember(d, k):
-    # from http://stackoverflow.com/questions/25923027/matlab-ismember-function-in-python
-    return [1 if (i == k) else 0 for i in d]
+def ismember(a, b):
+    # Code modified based upon Matlab code definition in http://uk.mathworks.com/help/matlab/ref/ismember.html?searchHighlight=ismember
+    dims=a.shape
+    outarray=numpy.zeros(dims, dtype=numpy.uint8)
+    im=numpy.where((i in b for i in a))
+    outarray[im]=1
+    return outarray
 
 # def ismember(a, b):
-    # Mode modified based upon Matlab code definition in http://uk.mathworks.com/help/matlab/ref/ismember.html?searchHighlight=ismember
+    # Code modified based upon Matlab code definition in http://uk.mathworks.com/help/matlab/ref/ismember.html?searchHighlight=ismember
     # bind = [a.any(x) for x in b]
     # return bind
     # Code for this is copied from http://stackoverflow.com/questions/15864082/python-equivalent-of-matlabs-ismember-function
