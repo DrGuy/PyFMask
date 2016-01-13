@@ -11,7 +11,9 @@
 #     + added skimage library
 #     + better handling for imagery of different resolutions
 
-# Some updates by Guy Serbin with version 3.3 code, bug fixes, and ENVI header update routins to produce an ENVI classification headers and color table.
+# Some updates by Guy Serbin with version 3.3 code, bug fixes, and ENVI header update routines to produce an ENVI classification headers and color table.
+# Fmask 3.3 Matlab code is available from https://github.com/prs021/fmask
+# Note: unused functions, e.g., plcloud_warm, were deleted from this version to minimize any chances of confusion
 
 import sys
 import gc
@@ -82,28 +84,6 @@ def imread(filename, resample=False, samples=None, lines=None):
         return outds.ReadAsArray()
     else:
         return band.ReadAsArray()
-
-
-def imfill_skimage(img):
-    """ Replicates the imfill function available within MATLAB. Based on the
-    example provided in
-    http://scikit-image.org/docs/dev/auto_examples/plot_holes_and_peaks.html#example-plot-holes-and-peaks-py.
-
-    """
-    # 2015/12/02 This function has been replaced with scipy.ndimage.morphology.binary_fill_holes() due to memory issues
-    seed = img.copy()
-
-    # Define seed points and the start points for the erosion process.
-    seed[1:-1, 1:-1] = img.max()
-
-    # Define the mask; Probably unneeded.
-    # mask = img
-
-    # Fill the holes
-    # filled = morphology.reconstruction(seed, mask, method='erosion')
-    filled = morphology.reconstruction(seed, img, method='erosion')
-
-    return filled
 
 
 def lndhdrread(filename):
@@ -958,10 +938,10 @@ def plcloud(filename, cldprob=22.5, num_Lst=None, images=None): # ,
     # (temperature & snow test )
     # test whether use thermal or not
     idclr = numexpr.evaluate("(idplcd == False) & (mask == 1)")
-    ptm = 100 * idclr.sum() / mask.sum()  # percent of del pixel
+    ptm = 100. * float(idclr.sum()) / float(mask.sum())  # percent of del pixel
     idlnd = numexpr.evaluate("idclr & (WT == False)")
     idwt = numexpr.evaluate("idclr & (WT == True)")  # &data(:,:,6)<=300;
-    lndptm = 100 * idlnd.sum() / mask.sum()
+    lndptm = 100. * float(idlnd.sum()) / float(mask.sum())
 
     logger.debug('idlnd: %s', idlnd)
     logger.debug('idlnd.sum(): %s', idlnd.sum())
@@ -1006,7 +986,7 @@ def plcloud(filename, cldprob=22.5, num_Lst=None, images=None): # ,
         # if len(F_wtemp) == 0:
         #     t_wtemp = 0
         # else:
-        t_wtemp = scipy.stats.scoreatpercentile(F_wtemp, 100 * h_pt)
+        t_wtemp = numpy.percentile(F_wtemp, 100 * h_pt, interpolation='midpoint')
         wTemp_prob = numexpr.evaluate('(t_wtemp - Temp) / 400')
         wTemp_prob[numexpr.evaluate('wTemp_prob < 0')] = 0
 
@@ -1020,8 +1000,8 @@ def plcloud(filename, cldprob=22.5, num_Lst=None, images=None): # ,
         # cloud over water probability
         wfinal_prob = numexpr.evaluate(
             '100 * wTemp_prob * Brightness_prob + 100 * Thin_prob')
-        wclr_max = scipy.stats.scoreatpercentile(
-            wfinal_prob[idwt], 100 * h_pt) + cldprob  # dynamic threshold (land)
+        wclr_max = numpy.percentile(
+            wfinal_prob[idwt], 100 * h_pt, interpolation='midpoint') + cldprob  # dynamic threshold (land)
         # wclr_max=50;% fixed threshold (water)
 
         # release memory
@@ -1032,9 +1012,9 @@ def plcloud(filename, cldprob=22.5, num_Lst=None, images=None): # ,
         t_buffer = 4 * 100
         # if len(F_temp) != 0:
         # 0.175 percentile background temperature (low)
-        t_templ = scipy.stats.scoreatpercentile(F_temp, 100 * l_pt)
+        t_templ = numpy.percentile(F_temp, 100 * l_pt, interpolation='midpoint')
         # 0.825 percentile background temperature (high)
-        t_temph = scipy.stats.scoreatpercentile(F_temp, 100 * h_pt)
+        t_temph = numpy.percentile(F_temp, 100 * h_pt, interpolation='midpoint')
         # else:
         #     t_templ = 0
         #     t_temph = 0
@@ -1064,8 +1044,8 @@ def plcloud(filename, cldprob=22.5, num_Lst=None, images=None): # ,
         # Final prob mask (land)
         final_prob = 100 * Temp_prob * Vari_prob + 100 * \
             Thin_prob  # cloud over land probability
-        clr_max = scipy.stats.scoreatpercentile(
-            final_prob[idlnd], 100 * h_pt) + cldprob  # dynamic threshold (land)
+        clr_max = numpy.percentile(
+            final_prob[idlnd], 100 * h_pt, interpolation='midpoint') + cldprob  # dynamic threshold (land)
 
         # release memory
         del Vari_prob
@@ -1100,7 +1080,7 @@ def plcloud(filename, cldprob=22.5, num_Lst=None, images=None): # ,
         # band 4 flood fill
         nir = data4.astype('float32')
         # estimating background (land) Band 4 ref
-        backg_B4 = scipy.stats.scoreatpercentile(nir[idlnd], 100.0 * l_pt)
+        backg_B4 = numpy.percentile(nir[idlnd], 100.0 * l_pt, interpolation='midpoint')
         nir[mask == 0] = backg_B4
         # fill in regional minimum Band 4 ref
         print('Filling in regional minimum for NIR band.')
@@ -1110,7 +1090,7 @@ def plcloud(filename, cldprob=22.5, num_Lst=None, images=None): # ,
         # band 5 flood fill
         swir = data5
         # estimating background (land) Band 4 ref
-        backg_B5 = scipy.stats.scoreatpercentile(swir[idlnd], 100.0 * l_pt)
+        backg_B5 = numpy.percentile(swir[idlnd], 100.0 * l_pt, interpolation='midpoint')
         swir[mask == 0] = backg_B5
         # fill in regional minimum Band 5 ref
         print('Filling in regional minimum for SWIR band.')
@@ -1178,9 +1158,9 @@ def plcloud(filename, cldprob=22.5, num_Lst=None, images=None): # ,
         if numpy.sum(cloud_mask) > 0:
             cloud_stddev = numpy.std(
                 cloud_temp, dtype='float64', ddof=1) / 100.0
-            pct_upper = numpy.percentile(cloud_temp, 97.5) / 100.0
-            pct_lower = numpy.percentile(cloud_temp, 83.5) / 100.0
-            pct_upper_max = numpy.percentile(cloud_temp, 98.75) / 100.0
+            pct_upper = numpy.percentile(cloud_temp, 97.5, interpolation='midpoint') / 100.0
+            pct_lower = numpy.percentile(cloud_temp, 83.5, interpolation='midpoint') / 100.0
+            pct_upper_max = numpy.percentile(cloud_temp, 98.75, interpolation='midpoint') / 100.0
 
             logger.debug("Standard Deviation: %f C" % cloud_stddev)
             logger.debug("97.5 percentile: %f C" % pct_upper)
@@ -1200,413 +1180,44 @@ def plcloud(filename, cldprob=22.5, num_Lst=None, images=None): # ,
             WT, Snow, Cloud, Shadow, dim, ul, resolu, zc, geoT, prj)
 
 
-def plcloud_warm(toa_bt, cldprob=22.5, num_Lst=None,
-                 shadow_prob=False, mask=None):
-    """
-    Calculates a cloud mask for a landsat 5/7 scene.
-
-    :param filename:
-        A string containing the file path of the landsat scene MTL file.
-
-    :param cldprob:
-        The cloud probability for the scene (defaults to 22.5%).
-
-    :param num_Lst:
-        The Landsat satellite number.
-
-    :param images:
-        A numpy.ndarray of pre-loaded, scaled, and corrected bands.
-
-    :param log_filename:
-        A string containing the file path of the output log produced by FMask.
-
-    :param shadow_prob:
-        A flag indicating if the shadow probability should be
-        calculated or not (required by FMask cloud shadow). Type Bool.
-
-    :return:
-        Tuple (zen,azi,ptm, temperature band (celcius*100),t_templ,t_temph,
-               water mask, snow mask, cloud mask , shadow probability,dim,
-               ul,resolu,zc).
-    """
-    Temp, data, \
-        dim, ul, zen, azi, zc, \
-        satu_B1, satu_B2, satu_B3, \
-        resolu, geoT, prj = toa_bt
-
-    if num_Lst < 8:  # Landsat 4~7
-        Thin_prob = 0  # there is no contribution from the new bands
-    else:
-        Thin_prob = numexpr.evaluate(
-            "cirrus / 400", {'cirrus': data[-1]}, locals())
-
-    Cloud = numpy.zeros(dim, 'uint8')  # cloud mask
-    Snow = numpy.zeros(dim, 'uint8')  # Snow mask
-    WT = numpy.zeros(dim, 'uint8')  # Water msk
-
-    # process only the overlap area
-    if mask is None:
-        mask = Temp > -9999
-    else:
-        mask = mask.astype('bool')
-
-    Shadow = numpy.zeros(dim, 'uint8')  # shadow mask
-
-    data1 = data[0, :, :]
-    data2 = data[1, :, :]
-    data3 = data[2, :, :]
-    data4 = data[3, :, :]
-    data5 = data[4, :, :]
-    data6 = data[5, :, :]
-
-    NDVI = numexpr.evaluate("(data4 - data3) / (data4 + data3)")
-    NDSI = numexpr.evaluate("(data2 - data5) / (data2 + data5)")
-
-    NDVI[numexpr.evaluate("(data4 + data3) == 0")] = 0.01
-    NDSI[numexpr.evaluate("(data2 + data5) == 0")] = 0.01
-
-    # saturation in the three visible bands
-    satu_Bv = numexpr.evaluate("(satu_B1 | satu_B2 | satu_B3)")
-    del satu_B1
-    # Basic cloud test
-    idplcd = numexpr.evaluate(
-        "(NDSI < 0.8) & (NDVI < 0.8) & (data6 > 300) & (Temp < 2700)")
-
-    # Snow test
-    # It takes every snow pixels including snow pixel under thin clouds or icy
-    # clouds
-    Snow[numexpr.evaluate(
-        "(NDSI > 0.15) & (Temp < 1000) & (data4 > 1100) & (data2 > 1000)")] = 1
-    #Snow[mask == 0] = 255
-    # Water test
-    # Zhe's water test (works over thin cloud)
-    WT[numexpr.evaluate(
-        "((NDVI < 0.01) & (data4 < 1100)) | ((NDVI < 0.1) & (NDVI > 0) & (data4 < 500))")] = 1
-    WT[mask == 0] = 255
-    # ################################################ Whiteness test
-    # visible bands flatness (sum(abs)/mean < 0.6 => brigt and dark cloud )
-    visimean = numexpr.evaluate("(data1 + data2 + data3) / 3 ")
-    whiteness = numexpr.evaluate(
-        "(abs(data1 - visimean) + abs(data2 - visimean)+ abs(data3 - visimean)) / visimean")
-    del visimean
-
-    # update idplcd
-    whiteness[satu_Bv] = 0  # If one visible is saturated whiteness == 0
-    idplcd &= whiteness < 0.7
-
-    # Haze test
-    HOT = numexpr.evaluate("data1 - 0.5 * data3 - 800")  # Haze test
-    idplcd &= numexpr.evaluate("(HOT > 0) | satu_Bv")
-    del HOT  # need to find thick warm cloud
-
-    # Ratio4/5>0.75 cloud test
-    idplcd &= numexpr.evaluate("(data4 / data5) > 0.75")
-
-    # Cirrus tests from Landsat 8
-    idplcd |= numexpr.evaluate("Thin_prob > 0.25")
-
-    ####################################constants##########################
-    l_pt = 0.175  # low percent
-    h_pt = 1 - l_pt  # high percent
-    # (temperature & snow test )
-    # test whether use thermal or not
-    idclr = numexpr.evaluate("(idplcd == False) & (mask == 1)")
-    ptm = 100 * idclr.sum() / mask.sum()  # percent of del pixel
-    idlnd = numexpr.evaluate("idclr & (WT == False)")
-    idwt = numexpr.evaluate("idclr & (WT == True)")  # &data(:,:,6)<=300;
-    lndptm = 100 * idlnd.sum() / mask.sum()
-
-    logger.debug('idlnd: %s', idlnd)
-    logger.debug('idlnd.sum(): %s', idlnd.sum())
-    logger.debug('lndptm: %s', lndptm)
-    sys.stdout.flush()
-
-    if ptm <= 0.1:  # no thermal test => meanless for snow detection (0~1)
-        # print('Clear pixel NOT exist in this scene (del prct =
-        # #.2f)',ptm)
-        Cloud[idplcd] = 1  # all cld
-
-        # mask out the non-contiguous pixels
-        Cloud[~(mask)] = 0
-
-        # # improving by majority filtering
-        # Cloud=bwmorph(Cloud,'majority')# exclude <5/9
-        #Cloud = scipy.signal.convolve2d(Cloud,numpy.ones((3,3),Cloud.dtype.name))[1:-1,1:-1]
-        #Cloud = (Cloud > 4).astype('uint8')
-        # Applying twice, makes a cleaner result
-        #Cloud = scipy.signal.convolve2d(Cloud,numpy.ones((3,3),Cloud.dtype.name))[1:-1,1:-1]
-        #Cloud = Cloud > 4
-
-        Shadow[Cloud == 0] = 1
-        Temp = -1
-        t_templ = -1
-        t_temph = -1
-    else:
-        # print('Clear pixel EXIST in this scene (del prct = #.2f)',ptm)
-        # (temperature test )
-        if lndptm >= 0.1:
-            F_temp = Temp[idlnd]  # get land temperature
-            #       print('Land temperature')
-        else:
-            F_temp = Temp[idclr]  # get del temperature
-            #        print('Clear temperature')
-
-        # Get cloud prob over water
-        # temperature test (over water)
-        # F_wtemp = Temp[numexpr.evaluate("(WT == 1) & (data6 <= 300)")] # get
-        # del water temperature
-        F_wtemp = Temp[idwt]
-        if len(F_wtemp) == 0:
-            t_wtemp = 0
-        else:
-            t_wtemp = scipy.stats.scoreatpercentile(F_wtemp, 100 * h_pt)
-        wTemp_prob = numexpr.evaluate('(t_wtemp - Temp) / 400')
-        wTemp_prob[numexpr.evaluate('wTemp_prob < 0')] = 0
-
-        # Brightness test (over water)
-        t_bright = 1100
-        Brightness_prob = data5 / t_bright
-        Brightness_prob[Brightness_prob > 1] = 1
-        Brightness_prob[Brightness_prob < 0] = 0
-
-        # Final prob mask (water)
-        # cloud over water probability
-        wfinal_prob = numexpr.evaluate(
-            '100 * wTemp_prob * Brightness_prob + 100 * Thin_prob')
-        wclr_max = scipy.stats.scoreatpercentile(
-            wfinal_prob[idwt], 100 * h_pt) + cldprob  # dynamic threshold (land)
-        # wclr_max=50;% fixed threshold (water)
-
-        # release memory
-        del wTemp_prob
-        del Brightness_prob
-
-        # Temperature test
-        t_buffer = 4 * 100
-        if len(F_temp) != 0:
-            # 0.175 percentile background temperature (low)
-            t_templ = scipy.stats.scoreatpercentile(F_temp, 100 * l_pt)
-            # 0.825 percentile background temperature (high)
-            t_temph = scipy.stats.scoreatpercentile(F_temp, 100 * h_pt)
-        else:
-            t_templ = 0
-            t_temph = 0
-
-        t_tempL = t_templ - t_buffer
-        t_tempH = t_temph + t_buffer
-        Temp_l = t_tempH - t_tempL
-        Temp_prob = (t_tempH - Temp) / Temp_l
-        # Temperature can have prob > 1
-        Temp_prob[Temp_prob < 0] = 0
-        # Temp_prob(Temp_prob > 1) = 1
-
-        NDSI[numexpr.evaluate('satu_B2 & (NDSI < 0)')] = 0
-        NDVI[numexpr.evaluate('satu_B3 & (NDVI > 0)')] = 0
-
-        Vari_prob = 1 - \
-            numpy.maximum(numpy.maximum(numpy.absolute(
-                NDSI), numpy.absolute(NDVI)), whiteness)
-
-        # release memory
-        del satu_B2
-        del satu_B3
-        del NDSI
-        del NDVI
-        del whiteness
-
-        # Final prob mask (land)
-        final_prob = 100 * Temp_prob * Vari_prob + 100 * \
-            Thin_prob  # cloud over land probability
-        clr_max = scipy.stats.scoreatpercentile(
-            final_prob[idlnd], 100 * h_pt) + cldprob  # dynamic threshold (land)
-
-        # release memory
-        del Vari_prob
-        del Temp_prob
-        del Thin_prob
-
-        logger.debug('cldprob: %s', cldprob)
-        logger.debug('clr_max: %s', clr_max)
-        logger.debug('t_templ: %s', t_templ)
-        sys.stdout.flush()
-
-        # print('pcloud probability threshold (land) = .2f#',clr_max)
-        # cloud over land : (idplcd & (final_prob > clr_max) & (WT == 0))
-        # thin cloud over water : (idplcd & (wfinal_prob > wclr_max) & (WT == 1))
-        # high prob cloud (land) : (final_prob > 99.0) & (WT == 0)
-        # extremly cold cloud : (Temp < t_templ - 3500)
-        id_final_cld = numexpr.evaluate(
-            '(idplcd & (final_prob > clr_max) & (WT == 0)) | (idplcd & (wfinal_prob > wclr_max) & (WT == 1)) | (Temp < t_templ - 3500)')
-
-        # Star with potential cloud mask
-        # # potential cloud mask
-        Cloud[id_final_cld] = 1
-
-        # release memory
-        del final_prob
-        del wfinal_prob
-        del id_final_cld
-
-        # Start with potential cloud shadow mask
-        if shadow_prob:
-            # band 4 flood fill
-            nir = data4.astype('float32')
-            # estimating background (land) Band 4 ref
-            backg_B4 = scipy.stats.scoreatpercentile(nir[idlnd], 100.0 * l_pt)
-            nir[mask == 0] = backg_B4
-            # fill in regional minimum Band 4 ref
-            nir = imfill_skimage(nir)
-            nir = nir - data4
-
-            # band 5 flood fill
-            swir = data5
-            # estimating background (land) Band 4 ref
-            backg_B5 = scipy.stats.scoreatpercentile(swir[idlnd], 100.0 * l_pt)
-            swir[mask == 0] = backg_B5
-            # fill in regional minimum Band 5 ref
-            swir = imfill_skimage(swir)
-            swir = swir - data5
-
-            # compute shadow probability
-            shadow_prob = numpy.minimum(nir, swir)
-            # release remory
-            del nir
-            del swir
-
-            Shadow[shadow_prob > 200] = 1
-            # release remory
-            del shadow_prob
-
-        # Cloud[idplcd==True]=1 # all cld
-
-        #*************************************************************************************#
-        #*************************************************************************************#
-        #*************************************************************************************#
-        #************The following code may be removed as the new code has changed************#
-        # Mask the non-contiguous pixels
-        #Cloud[~(mask)] = 0
-
-        # improving by majority filtering
-        # ERROR: not aware of a similar filter in scipy (though one may very well exist)
-        # Doing convolution of all surrounding pixels & filtering those > 4, which should in theory have the same result
-        #Cloud = scipy.signal.convolve2d(Cloud, numpy.ones((3,3), Cloud.dtype.name))[1:-1,1:-1]
-        #Cloud = (Cloud > 4).astype('uint8')
-        # Applying twice, makes a cleaner result
-        #Cloud = scipy.signal.convolve2d(Cloud, numpy.ones((3,3), Cloud.dtype.name))[1:-1,1:-1]
-        # Cloud=(Cloud>4).astype('uint8')
-        # 3rd, still some single pixels at tile edges
-        # Cloud=scipy.signal.convolve2d(Cloud,numpy.ones((3,3),Cloud.dtype.name))[1:-1,1:-1]
-        #Cloud = Cloud > 4
-        #************The above code may be removed as the new code has changed****************#
-        #*************************************************************************************#
-        #*************************************************************************************#
-        #*************************************************************************************#
-
-    del data
-    images = None
-    gc.collect()
-
-    # refine Water mask - Zhe's water mask (no confusion water/cloud)
-    WT[numexpr.evaluate("(WT == 1) & (Cloud == 0)")] = 1
-    # bwmorph changed Cloud to Binary
-    Cloud = Cloud.astype('uint8')
-    Cloud[mask == 0] = 255
-    Shadow[mask == 0] = 255
-
-    gc.collect()
-    cloud_mask = (Cloud == 1) & mask
-
-    if ptm > 0.1:
-        cloud_temp = Temp[cloud_mask]
-
-        logger.debug("Snow Percent: %f" %
-                     ((float(Snow[mask].sum()) / float(mask.sum())) * 100.0))
-        logger.debug("Cloud Mean: %f C" % (numpy.mean(cloud_temp) / 100.0))
-
-        if numpy.sum(cloud_mask) > 0:
-            cloud_stddev = numpy.std(
-                cloud_temp, dtype='float64', ddof=1) / 100.0
-            pct_upper = numpy.percentile(cloud_temp, 97.5) / 100.0
-            pct_lower = numpy.percentile(cloud_temp, 83.5) / 100.0
-            pct_upper_max = numpy.percentile(cloud_temp, 98.75) / 100.0
-
-            logger.debug("Standard Deviation: %f C" % cloud_stddev)
-            logger.debug("97.5 percentile: %f C" % pct_upper)
-            logger.debug("83.5 percentile: %f C" % pct_lower)
-            logger.debug("98.75 percentile: %f C" % pct_upper_max)
-
-    logger.info("Final Cloud Layer Percent: %f" %
-                ((float(Cloud[cloud_mask].sum()) / float(mask.sum())) * 100.0))
-
-    logger.info("Completed processing FMASK cloud cover...")
-
-    # We'll modify the return argument for the Python implementation
-    # (geoT,prj) are added to the list
-    return (zen, azi, ptm, Temp, t_templ, t_temph, WT, Snow, Cloud, Shadow, dim, ul, resolu, zc, geoT, prj)
-
-
 def fcssm(Sun_zen, Sun_azi, ptm, Temp, t_templ, t_temph, Water, Snow, plcim,
 plsim, ijDim, resolu, ZC, cldpix, sdpix, snpix):
     """ Calculates the cloud shadow
     mask for a scene, given solar geometry information, the thermal band for the
     scene & a cloud mask.
-
     :param Sun_zen:
         Solar Elevation angle (degrees).
-
     :param Sun_azi:
         Solar Azimuth angle (degrees).
-
     :param ptm:
         Percentage of deleted pixels.
-
     :param Temp:
         A numpy.ndarray containing the temperature band for the landsat scene (Celcius*100).
     :param t_templ:
         0.175 percentile background temperature (low).
-
     :param t_temph:
         0.825 percentile background temperature (high).
-
     :param Water:
         A numpy.ndarray of type Bool containing the water mask calculated by FMask.
-
     :param Snow:
         A numpy.ndarray of type Bool containing the snow mask calculated by FMask.
-
     :param plcim:
         A numpy.ndarray of type Bool containing the cloud mask calculated by FMask.
-
     :param plsim:
         A numpy.ndarray of type Bool containing the cloud shadow mask calculated by FMask.
-
     :param ijDim:
         A tuple containing the resolution of the scene bands (height, width).
-
     :param resolu:
         A tuple (number, numpber).
-
     :param ZC:
         The UTM Zone Number of the scene.
-
     :param cldpix:
         A number for the cloud mask dilation (in pixels).
-
     :param sdpix:
         A number for the cloud shadow mask dilation (in pixels)
     """
-    
-    # Function for Cloud, cloud Shadow, and Snow Masking 3.3.0
-    
+    # Function for Cloud, cloud Shadow, and Snow Masking 1.6.3sav
     # History of revisions:
-    # calculate cloud DEM with recorded height (Zhe 08/19/2015)
-    # exclude small cloud object < 3 pixels (Zhe 10/27/2013)
-    # fix bug in calculating r_obj and change num_pix value (Zhe 09/27/2013)
-    # Output clear pixel percent for the whole Landsat image (Zhe 09/13/2013)
-    # Change Tbuffer to 0.95 to fix ealier stops in cloud shadow match (Zhe 03/01/2013)
-    # change the Fmask band name to "*Fmask" (Zhe 09/27/2012)
-    # dilate snow by default 3 pixels in 8 connect directions (Zhe 05/24/2012)
-    # exclude small cloud object <= 9 pixels (Zhe 3/07/2012)
     # cloud shadow do not have to overlap with potential cloud shadow layer (Zhe Zhu 04/24/2011)
     # exclude small cloud object <= 25 pixels (zhe Zhu 3/07/2011)
     # dilate shadow again (3 pixels as default) (Zhe Zhu 12/23/2010);
@@ -1617,12 +1228,15 @@ plsim, ijDim, resolu, ZC, cldpix, sdpix, snpix):
     # cloud DEM by thermal in cloud and shadow match (Zhe Zhu 1/03/2009)
     
     print('Calculating cloud shadow mask.')
+
     # solar elevation angle
     Sun_ele = 90.0 - Sun_zen
     sun_ele_rad = math.radians(Sun_ele)
-    # solar azimuth anngle
+    
+    # solar azimuth angle
     Sun_tazi = Sun_azi - 90.0
     sun_tazi_rad = math.radians(Sun_tazi)
+    print('Solar elevation and azimuth angles: %0.1f, %0.1f degrees.'%(Sun_ele,Sun_tazi)) 
     # assume resolu.x=resolu.y
     sub_size = resolu[0]
     win_height = ijDim[0]
@@ -1649,25 +1263,26 @@ plsim, ijDim, resolu, ZC, cldpix, sdpix, snpix):
     del plcim  # empty memory
 
     # revised percent of cloud on the scene after plcloud
-    revised_ptm = numpy.sum(cloud_test) / numpy.sum(boundary_test)
+    revised_ptm = float(numpy.sum(cloud_test)) / float(numpy.sum(boundary_test))
     # no t test  => more than 98 # clouds and partly cloud over land
     # => no match => rest are definite shadows
 
     # cloud covers more than 90# of the scene
     # => no match => rest are definite shadows
-    # print('Cloud and cloud shadow matching ...')
+    # fprintf('Cloud and cloud shadow matching ...')
 
     if ptm <= 0.1 or revised_ptm >= 0.90:
-        #     print('No Shadow Match due to too much cloud (>90 percent)')
         print('Skip cloud & cloud shadow matching because of high cloud cover.')
+        #     fprintf('No Shadow Match due to too much cloud (>90 percent)')
         cloud_cal[cloud_test == True] = 1
         shadow_cal[cloud_test == False] = 1
         similar_num = -1
         #   height_num=-1
 
     else:
-        #     print('Shadow Match in processing')
         print('Performing cloud & cloud shadow matching.')
+        #     fprintf('Shadow Match in processing')
+
         # define constants
         Tsimilar = 0.30
         Tbuffer = 0.95  # threshold for matching buffering
@@ -1680,12 +1295,11 @@ plsim, ijDim, resolu, ZC, cldpix, sdpix, snpix):
         rate_elapse = 6.5  # degrees/km
         rate_dlapse = 9.8  # degrees/km
 
-        #     print('Set cloud similarity = #.3f',Tsimilar)
-        #     print('Set matching buffer = #.3f',Tbuffer)
-        #     print('Shadow match for cloud object >= #d pixels',num_cldoj)
+        #     fprintf('Set cloud similarity = #.3f',Tsimilar)
+        #     fprintf('Set matching buffer = #.3f',Tbuffer)
+        #     fprintf('Shadow match for cloud object >= #d pixels',num_cldoj)
 
         i_step = 2 * sub_size * math.tan(sun_ele_rad)  # move 2 pixel at a time
-
         # get moving direction
         (rows, cols) = numpy.nonzero(boundary_test)
         (y_ul, num) = (rows.min(), rows.argmin())
@@ -1705,89 +1319,49 @@ plsim, ijDim, resolu, ZC, cldpix, sdpix, snpix):
         print('Getting view angle geometry.')
         (A, B, C, omiga_par, omiga_per) = viewgeo(float(x_ul), float(y_ul), float(
             x_ur), float(y_ur), float(x_ll), float(y_ll), float(x_lr), float(y_lr))
-
-        # Segmentate each cloud
-        #     print('Cloud segmentation & matching')
-        # (segm_cloud_init, segm_cloud_init_features) = measure.label(
-        #     cloud_test, scipy.ndimage.morphology.generate_binary_structure(2, 2))
+        
         print('Segmenting each cloud.')
-        segm_cloud_init, num=measure.label(cloud_test,8, return_num=True) # bwlabeln(cloud_test,8)
-        print('The total number of initial cloud objects are: %d'%num)
-        # L = segm_cloud_init
-        s = measure.regionprops(segm_cloud_init,'area')
-        # print('s has a length of %d.'% len(s))
-        area=[]
-        for x in s:
-            area.append(x.area)
-        
-        # filter out cloud object < than num_cldoj pixels
-        # morphology.remove_small_objects(
-        #     segm_cloud_init, num_cldoj, in_place=True)
-        # if skimage_version[1] >= 10:
-        #     segm_cloud, fw, inv = segmentation.relabel_sequential(
-        #         segm_cloud_init)
-        # else:
-        #     segm_cloud, fw, inv = segmentation.relabel_from_one(
-        #         segm_cloud_init)
-        # num = numpy.max(segm_cloud)
-
-       ##   # NOTE: properties is deprecated as of version 0.9 and all properties
-        # # are computed. Currently using version 0.8.2. If this version or a
-        # # later versionproves too slow, I'll implement another method. JS
-        # # 16/12/2013 The properties is taking approx 3min, I can cut that down
-        # # to just a few seconds using another method, but will leave for the
-        # # time being.
-        # if skimage_version[1] > 9:
-        #     s = measure.regionprops(segm_cloud)
-        # else:
-        #     s = measure.regionprops(segm_cloud, properties=[
-        #                             'Area', 'Coordinates'])
-
-       ##   # Use iteration to get the optimal move distance
-        # # Calulate the moving cloud shadow
-
-       ##   # height_num=zeros(num) # cloud relative height (m)
-        # similar_num = numpy.zeros(num)  # cloud shadow match similarity (m)
-        
+        # Segmentate each cloud
+        #     fprintf('Cloud segmentation & matching')
+        (segm_cloud_init, segm_cloud_init_features) = scipy.ndimage.measurements.label(
+            cloud_test, scipy.ndimage.morphology.generate_binary_structure(2, 2))
+        print('The total number of initial cloud objects are: %d'%segm_cloud_init_features)
         # filter out cloud object < than num_cldoj pixels
         print('Filtering out small cloud objects.')
-        idx = numexpr.evaluate('area >= num_cldoj')
-        print('Shapes of segm_cloud_init:')
-        print(segm_cloud_init.shape)
-        print('idx:')
-        print(idx.shape)
-        print('Length segm_cloud_init: %d, idx: %d'%(len(segm_cloud_init),len(idx)))
-        segm_cloud_tmp = ismember(segm_cloud_init,idx)
-        print('The maximum value of segm_cloud_tmp is: %d'%numpy.amax(segm_cloud_tmp))
-        segm_cloud,num=measure.label(segm_cloud_tmp,8, return_num=True)
-        print('The number of cloud types are: %d' %num)
-        print('The shape of segm_cloud is:')
-        print(segm_cloud.shape)
-        # s = measure.regionprops(segm_cloud,'area')
-        
-        # area_final=[]
-        # for x in s:
-        #     area_final.append(x.area)
-        # obj_num=area_final
-    
-        # Get the x,y of each cloud
-        # Matrix used in recording the x,y
-        xys = measure.regionprops(segm_cloud,'PixelList')
-        print('The length of xys is: %d'%len(xys))
+        morphology.remove_small_objects(
+            segm_cloud_init, num_cldoj, in_place=True)
+        if skimage_version[1] >= 10:
+            segm_cloud, fw, inv = segmentation.relabel_sequential(
+                segm_cloud_init)
+        else:
+            segm_cloud, fw, inv = segmentation.relabel_from_one(
+                segm_cloud_init)
+        num = numpy.max(segm_cloud)
+        # NOTE: properties is deprecated as of version 0.9 and all properties
+        # are computed. Currently using version 0.8.2. If this version or a
+        # later versionproves too slow, I'll implement another method. JS
+        # 16/12/2013 The properties is taking approx 3min, I can cut that down
+        # to just a few seconds using another method, but will leave for the
+        # time being.
+        if skimage_version[1] > 9:
+            s = measure.regionprops(segm_cloud)
+        else:
+            s = measure.regionprops(segm_cloud, properties=[
+                                    'Area', 'Coordinates'])
         # Use iteration to get the optimal move distance
         # Calulate the moving cloud shadow
-    
-        # height_num=numpy.zeros(1,num) # cloud relative height (m)
-        similar_num=numpy.zeros(num) # cloud shadow match similarity (m)
-        
+
+        # height_num=zeros(num) # cloud relative height (m)
+        similar_num = numpy.zeros(num)  # cloud shadow match similarity (m)
+
         # Newer method of looping through the cloud objects/segments JS
         # 16/12/2013
         print('Looping through cloud objects.')
-        for cloud_type in range(num):
+        for cloud_type in s:
 
-            cld_area = xys[cloud_type].area
-            cld_label = xys[cloud_type].label
-
+            cld_area = cloud_type['Area']
+            cld_label = cloud_type['Label']
+            
             num_pixels = cld_area
 
             # Have re-formatted the arrays to be Python style memory ordering
@@ -1802,23 +1376,21 @@ plsim, ijDim, resolu, ZC, cldpix, sdpix, snpix):
             tmp_xys = numpy.zeros((2, num_pixels))
 
             # record this original ids
-            orin_cid = xys[cloud_type].coords[0]
-            print('orin_cid:')
-            print(orin_cid)
-            print('Length: %d'%len(orin_cid))
-            
+            orin_cid = (cloud_type['Coordinates'][:, 0],
+                        cloud_type['Coordinates'][:, 1])
+
             # Temperature of the cloud object
             temp_obj = Temp[orin_cid]
 
             # assume object is round r_obj is radium of object
-            r_obj = math.sqrt(cld_area / (2*math.pi))
+            r_obj = math.sqrt(cld_area /2.* math.pi)
 
             # number of inward pixes for correct temperature
             #        num_pix=8
             pct_obj = math.pow(r_obj - num_pix, 2) / math.pow(r_obj, 2)
             # pct of edge pixel should be less than 1
             pct_obj = numpy.minimum(pct_obj, 1)
-            t_obj = scipy.stats.mstats.mquantiles(temp_obj, pct_obj)
+            t_obj = scipy.stats.mstats.mquantiles(temp_obj, pct_obj, alphap=0.5, betap=0.5)
 
             # put the edge of the cloud the same value as t_obj
             temp_obj[temp_obj > t_obj] = t_obj
@@ -1867,8 +1439,7 @@ plsim, ijDim, resolu, ZC, cldpix, sdpix, snpix):
                 tmp_i = XY_type[0, :]  # row
 
                 # the id that is out of the image
-                out_id = (tmp_i < 0) | (tmp_i >= win_height) | (
-                    tmp_j < 0) | (tmp_j >= win_width)
+                out_id = numexpr.evaluate("(tmp_i < 0) | (tmp_i >= win_height) | (tmp_j < 0) | (tmp_j >= win_width)")
                 out_all = numpy.sum(out_id)
 
                 tmp_ii = tmp_i[out_id == 0]
@@ -1898,15 +1469,11 @@ plsim, ijDim, resolu, ZC, cldpix, sdpix, snpix):
                     # height_num=record_h
 
                     if Sun_azi < 180:
-                        tmp_XY_type[1, :] = numpy.round(
-                            tmp_xys[1, :] - i_vir * math.cos(sun_tazi_rad))  # X is for col j,2
-                        tmp_XY_type[0, :] = numpy.round(
-                            tmp_xys[0, :] - i_vir * math.sin(sun_tazi_rad))  # Y is for row i,1
+                        tmp_XY_type[1, :] = numpy.round(tmp_xys[1, :] - i_vir * math.cos(sun_tazi_rad))  # X is for col j,2
+                        tmp_XY_type[0, :] = numpy.round(tmp_xys[0, :] - i_vir * math.sin(sun_tazi_rad))  # Y is for row i,1
                     else:
-                        tmp_XY_type[1, :] = numpy.round(
-                            tmp_xys[1, :] + i_vir * math.cos(sun_tazi_rad))  # X is for col j,2
-                        tmp_XY_type[0, :] = numpy.round(
-                            tmp_xys[0, :] + i_vir * math.sin(sun_tazi_rad))  # Y is for row i,1
+                        tmp_XY_type[1, :] = numpy.round(tmp_xys[1, :] + i_vir * math.cos(sun_tazi_rad))  # X is for col j,2
+                        tmp_XY_type[0, :] = numpy.round(tmp_xys[0, :] + i_vir * math.sin(sun_tazi_rad))  # Y is for row i,1
 
                     tmp_scol = tmp_XY_type[1, :]
                     tmp_srow = tmp_XY_type[0, :]
@@ -1931,7 +1498,7 @@ plsim, ijDim, resolu, ZC, cldpix, sdpix, snpix):
         # # dilate each cloud and shadow object by 3 and 6 pixel outward in 8 connect directions
         #    cldpix=3 # number of pixels to be dilated for cloud
         #    sdpix=3 # number of pixels to be dilated for shadow
-        # print('Dilate #d pixels for cloud & #d pixels for shadow
+        # fprintf('Dilate #d pixels for cloud & #d pixels for shadow
         # objects',cldpix,sdpix)
 
         # NOTE: An alternative for a structuring element would be to use the iterations parameter of binary_dilation()
@@ -1976,13 +1543,12 @@ plsim, ijDim, resolu, ZC, cldpix, sdpix, snpix):
     cs_final[boundary_test == 0] = 255
 
     # record cloud and cloud shadow percent
-    tmpcs = ((cs_final == 1) | (cs_final == 3)).astype('uint8')
-    cspt = 100.0 * (tmpcs.sum() / boundary_test.sum())
+    tmpcs = numexpr.evaluate("((cs_final == 1) | (cs_final == 3))")
+    cspt = 100.0 * (float(tmpcs.sum()) / float(boundary_test.sum()))
 
     return (similar_num, cspt, shadow_cal, cs_final)
 
 # viewgeo function
-
 
 def viewgeo(x_ul, y_ul, x_ur, y_ur, x_ll, y_ll, x_lr, y_lr):
     # imput "x",j
@@ -2012,7 +1578,6 @@ def viewgeo(x_ul, y_ul, x_ur, y_ur, x_ll, y_ll, x_lr, y_lr):
 
 # mat_truecloud function
 
-
 def mat_truecloud(x, y, h, A, B, C, omiga_par, omiga_per):
     # imput "x",j col
     # imput "y",i row
@@ -2029,26 +1594,6 @@ def mat_truecloud(x, y, h, A, B, C, omiga_par, omiga_per):
     y_new = y + delt_y  # new y, i
 
     return (x_new, y_new)
-
-
-def ismember(a, b):
-    # Code modified based upon Matlab code definition in http://uk.mathworks.com/help/matlab/ref/ismember.html?searchHighlight=ismember
-    dims=a.shape
-    outarray=numpy.zeros(dims, dtype=numpy.uint8)
-    im=numpy.where((i in b for i in a))
-    outarray[im]=1
-    return outarray
-
-# def ismember(a, b):
-    # Code modified based upon Matlab code definition in http://uk.mathworks.com/help/matlab/ref/ismember.html?searchHighlight=ismember
-    # bind = [a.any(x) for x in b]
-    # return bind
-    # Code for this is copied from http://stackoverflow.com/questions/15864082/python-equivalent-of-matlabs-ismember-function
-    # bind={}
-    # for i, elt in enumerate(b):
-    #     if elt not in bind:
-    #         bind[elt] = i
-    # return [bind.get(itm, None) for itm in a]  # None can be replaced by any other "not in b" value
 
 
 def updatefmaskheader(file): # This backs up the ENVI header file created by GDAL, and creates a new one as an ENVI Classification
